@@ -104,6 +104,25 @@ async function readSSEEvent(response: Response): Promise<string> {
     return new TextDecoder().decode(value);
 }
 
+async function readSSEUntil(response: Response, predicate: (text: string) => boolean, timeoutMs = 2000): Promise<string> {
+    const reader = response.body?.getReader();
+    let text = '';
+    const decoder = new TextDecoder();
+    const timeout = setTimeout(() => reader!.cancel(), timeoutMs);
+
+    try {
+        while (!predicate(text)) {
+            const { value, done } = await reader!.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+        }
+        text += decoder.decode();
+        return text;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 /**
  * Helper to send JSON-RPC request
  */
@@ -725,11 +744,7 @@ describe('Zod v4', () => {
             expect(response.status).toBe(200);
             expect(response.headers.get('content-type')).toBe('text/event-stream');
 
-            const reader = response.body?.getReader();
-
-            // The responses may come in any order or together in one chunk
-            const { value } = await reader!.read();
-            const text = new TextDecoder().decode(value);
+            const text = await readSSEUntil(response, text => text.includes('"id":"req-1"') && text.includes('"id":"req-2"'));
 
             // Check that both responses were sent on the same stream
             expect(text).toContain('"id":"req-1"');
@@ -1514,9 +1529,7 @@ describe('Zod v4', () => {
             expect(reconnectResponse.status).toBe(200);
 
             // Read the replayed notification
-            const reconnectReader = reconnectResponse.body?.getReader();
-            const reconnectData = await reconnectReader!.read();
-            const reconnectText = new TextDecoder().decode(reconnectData.value);
+            const reconnectText = await readSSEUntil(reconnectResponse, text => text.includes('Second notification from MCP server'));
 
             // Verify we received the second notification that was sent after our stored eventId
             expect(reconnectText).toContain('Second notification from MCP server');
