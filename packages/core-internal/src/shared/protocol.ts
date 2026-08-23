@@ -738,16 +738,20 @@ export abstract class Protocol<ContextT extends BaseContext> {
         messageId: number,
         timeout: number,
         maxTotalTimeout: number | undefined,
-        onTimeout: () => void,
+        onTimeout: (maxTotalTimeoutExceeded: boolean) => void,
         resetTimeoutOnProgress: boolean = false
     ) {
+        const startTime = Date.now();
+        const timeoutHandler = () => {
+            onTimeout(maxTotalTimeout !== undefined && Date.now() - startTime >= maxTotalTimeout);
+        };
         this._timeoutInfo.set(messageId, {
-            timeoutId: setTimeout(onTimeout, timeout),
-            startTime: Date.now(),
+            timeoutId: setTimeout(timeoutHandler, maxTotalTimeout === undefined ? timeout : Math.min(timeout, maxTotalTimeout)),
+            startTime,
             timeout,
             maxTotalTimeout,
             resetTimeoutOnProgress,
-            onTimeout
+            onTimeout: timeoutHandler
         });
     }
 
@@ -756,7 +760,7 @@ export abstract class Protocol<ContextT extends BaseContext> {
         if (!info) return false;
 
         const totalElapsed = Date.now() - info.startTime;
-        if (info.maxTotalTimeout && totalElapsed >= info.maxTotalTimeout) {
+        if (info.maxTotalTimeout !== undefined && totalElapsed >= info.maxTotalTimeout) {
             this._timeoutInfo.delete(messageId);
             throw new SdkError(SdkErrorCode.RequestTimeout, 'Maximum total timeout exceeded', {
                 maxTotalTimeout: info.maxTotalTimeout,
@@ -765,7 +769,8 @@ export abstract class Protocol<ContextT extends BaseContext> {
         }
 
         clearTimeout(info.timeoutId);
-        info.timeoutId = setTimeout(info.onTimeout, info.timeout);
+        const remainingTotalTimeout = info.maxTotalTimeout === undefined ? info.timeout : info.maxTotalTimeout - totalElapsed;
+        info.timeoutId = setTimeout(info.onTimeout, Math.min(info.timeout, remainingTotalTimeout));
         return true;
     }
 
@@ -1564,7 +1569,16 @@ export abstract class Protocol<ContextT extends BaseContext> {
             options?.signal?.addEventListener('abort', onAbort, { once: true });
 
             const timeout = options?.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
-            const timeoutHandler = () => cancel(new SdkError(SdkErrorCode.RequestTimeout, 'Request timed out', { timeout }));
+            const timeoutHandler = (maxTotalTimeoutExceeded = false) => {
+                cancel(
+                    maxTotalTimeoutExceeded
+                        ? new SdkError(SdkErrorCode.RequestTimeout, 'Maximum total timeout exceeded', {
+                              maxTotalTimeout: options?.maxTotalTimeout,
+                              totalElapsed: Date.now() - flowStartedAt
+                          })
+                        : new SdkError(SdkErrorCode.RequestTimeout, 'Request timed out', { timeout })
+                );
+            };
 
             this._setupTimeout(messageId, timeout, options?.maxTotalTimeout, timeoutHandler, options?.resetTimeoutOnProgress ?? false);
 

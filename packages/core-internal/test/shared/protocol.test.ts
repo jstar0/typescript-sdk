@@ -492,6 +492,58 @@ describe('protocol tests', () => {
             expect(onProgressMock).toHaveBeenCalledTimes(1);
         });
 
+        test('should enforce maxTotalTimeout when no progress is received', async () => {
+            await protocol.connect(transport);
+            const request = { method: 'example', params: {} };
+            const mockSchema: ZodType<{ result: string }> = z.object({
+                result: z.string()
+            });
+            const requestPromise = testRequest(protocol, request, mockSchema, {
+                timeout: 1000,
+                maxTotalTimeout: 150
+            });
+            const rejection = expect(requestPromise).rejects.toMatchObject({
+                code: SdkErrorCode.RequestTimeout,
+                data: { maxTotalTimeout: 150 }
+            });
+
+            await vi.advanceTimersByTimeAsync(151);
+
+            await rejection;
+        });
+
+        test('should re-arm progress timeout against the remaining maxTotalTimeout budget', async () => {
+            await protocol.connect(transport);
+            const request = { method: 'example', params: {} };
+            const mockSchema: ZodType<{ result: string }> = z.object({
+                result: z.string()
+            });
+            const onProgressMock = vi.fn();
+            const requestPromise = testRequest(protocol, request, mockSchema, {
+                timeout: 1000,
+                maxTotalTimeout: 150,
+                resetTimeoutOnProgress: true,
+                onprogress: onProgressMock
+            });
+            const rejection = expect(requestPromise).rejects.toMatchObject({
+                code: SdkErrorCode.RequestTimeout,
+                data: { maxTotalTimeout: 150 }
+            });
+
+            vi.advanceTimersByTime(80);
+            transport.onmessage?.({
+                jsonrpc: '2.0',
+                method: 'notifications/progress',
+                params: { progressToken: 0, progress: 50, total: 100 }
+            });
+            await Promise.resolve();
+
+            await vi.advanceTimersByTimeAsync(71);
+
+            await rejection;
+            expect(onProgressMock).toHaveBeenCalledTimes(1);
+        });
+
         test('should timeout if no progress received within timeout period', async () => {
             await protocol.connect(transport);
             const request = { method: 'example', params: {} };
