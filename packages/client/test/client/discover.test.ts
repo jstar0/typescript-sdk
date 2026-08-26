@@ -84,6 +84,26 @@ describe('Client.discover()', () => {
         await client.close();
     });
 
+    test('accepts resultType and _meta on the server/discover response envelope', async () => {
+        const transport = new ScriptedTransport((message, t) => {
+            if (!isJSONRPCRequest(message) || message.method !== 'server/discover') return;
+            t.reply({
+                jsonrpc: '2.0',
+                id: message.id,
+                resultType: 'complete',
+                result: { supportedVersions: [MODERN], capabilities: {} },
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'envelope-server', version: '1.0.0' } }
+            } as JSONRPCMessage);
+        });
+        const client = new Client({ name: 'c', version: '0' }, { versionNegotiation: { mode: { pin: MODERN }, probe: { timeoutMs: 20 } } });
+
+        await client.connect(transport);
+
+        expect(client.getNegotiatedProtocolVersion()).toBe(MODERN);
+        expect(client.getServerVersion()).toEqual({ name: 'envelope-server', version: '1.0.0' });
+        await client.close();
+    });
+
     test('is rejected locally with a typed error on a 2025-era connection (the method does not exist on that era)', async () => {
         const transport = new ScriptedTransport(legacyScript);
         const client = new Client({ name: 'c', version: '0' });

@@ -176,6 +176,34 @@ type RawProbeReply =
     | { kind: 'closed' }
     | { kind: 'timeout' };
 
+const PROBE_RESULT_RESPONSE_KEYS = new Set(['jsonrpc', 'id', 'result', 'resultType', '_meta']);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Read the two server/discover response layouts seen in the 2026 wire spec:
+ * the normal JSON-RPC result body and the response-level resultType/_meta
+ * fields. The latter are folded into the body for the existing classifier.
+ */
+function probeResultForMessage(message: unknown, expectedId: string): unknown | undefined {
+    if (isJSONRPCResultResponse(message)) {
+        return message.id === expectedId ? message.result : undefined;
+    }
+    if (!isPlainObject(message) || message['jsonrpc'] !== '2.0' || message['id'] !== expectedId || !isPlainObject(message['result'])) {
+        return undefined;
+    }
+    if (Object.keys(message).some(key => !PROBE_RESULT_RESPONSE_KEYS.has(key))) {
+        return undefined;
+    }
+
+    const result = { ...message['result'] };
+    if (Object.hasOwn(message, 'resultType')) result['resultType'] = message['resultType'];
+    if (Object.hasOwn(message, '_meta')) result['_meta'] = message['_meta'];
+    return result;
+}
+
 /**
  * Temporary ownership of a raw transport for the negotiation exchange, before
  * the Protocol machinery attaches. `open()` installs the window's handlers and
@@ -211,17 +239,15 @@ class ProbeWindow {
         const window = new ProbeWindow(transport);
         transport.onmessage = message => {
             const pending = window._pending;
-            if (
-                pending !== undefined &&
-                (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) &&
-                message.id === pending.id
-            ) {
+            const result = pending === undefined ? undefined : probeResultForMessage(message, pending.id);
+            if (pending !== undefined && result !== undefined) {
                 window._pending = undefined;
-                if (isJSONRPCResultResponse(message)) {
-                    pending.resolve({ kind: 'response', result: message.result });
-                } else {
-                    pending.resolve({ kind: 'response', error: message.error });
-                }
+                pending.resolve({ kind: 'response', result });
+                return;
+            }
+            if (pending !== undefined && isJSONRPCErrorResponse(message) && message.id === pending.id) {
+                window._pending = undefined;
+                pending.resolve({ kind: 'response', error: message.error });
                 return;
             }
             // Probe-window guard: drop everything else with zero bytes written back (see module doc).
