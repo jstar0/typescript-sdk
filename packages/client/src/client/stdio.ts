@@ -4,7 +4,13 @@ import type { Stream } from 'node:stream';
 import { PassThrough } from 'node:stream';
 
 import type { JSONRPCMessage, Transport } from '@modelcontextprotocol/core-internal';
-import { ReadBuffer, SdkError, SdkErrorCode, serializeMessage } from '@modelcontextprotocol/core-internal';
+import {
+    parseJSONRPCMessageWithResultResponseEnvelope,
+    ReadBuffer,
+    SdkError,
+    SdkErrorCode,
+    serializeMessage
+} from '@modelcontextprotocol/core-internal';
 import spawn from 'cross-spawn';
 
 export type StdioServerParameters = {
@@ -110,7 +116,10 @@ export class StdioClientTransport implements Transport {
 
     constructor(server: StdioServerParameters) {
         this._serverParams = server;
-        this._readBuffer = new ReadBuffer({ maxBufferSize: server.maxBufferSize });
+        this._readBuffer = new ReadBuffer({
+            maxBufferSize: server.maxBufferSize,
+            messageParser: parseJSONRPCMessageWithResultResponseEnvelope
+        });
         if (server.stderr === 'pipe' || server.stderr === 'overlapped') {
             this._stderrStream = new PassThrough();
         }

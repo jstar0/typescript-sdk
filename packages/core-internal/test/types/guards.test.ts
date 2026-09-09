@@ -6,13 +6,26 @@ import {
     isJSONRPCErrorResponse,
     isJSONRPCResponse,
     isJSONRPCResultResponse,
-    parseJSONRPCMessage
+    parseJSONRPCMessage,
+    parseJSONRPCMessageWithResultResponseEnvelope
 } from '../../src/types/guards';
 
 describe('parseJSONRPCMessage', () => {
-    it('lifts response-level server/discover fields before strict envelope validation', () => {
-        expect(
+    it('keeps rejecting response-level server/discover fields by default', () => {
+        expect(() =>
             parseJSONRPCMessage({
+                jsonrpc: '2.0',
+                id: 'probe-1',
+                result: { supportedVersions: ['2026-07-28'] },
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+            })
+        ).toThrow();
+    });
+
+    it('lifts response-level server/discover fields with the client opt-in parser', () => {
+        expect(
+            parseJSONRPCMessageWithResultResponseEnvelope({
                 jsonrpc: '2.0',
                 id: 'probe-1',
                 result: { supportedVersions: ['2026-07-28'] },
@@ -31,12 +44,12 @@ describe('parseJSONRPCMessage', () => {
     });
 
     it('continues rejecting unrelated response-level fields', () => {
-        expect(() => parseJSONRPCMessage({ jsonrpc: '2.0', id: 1, result: {}, extraTop: true })).toThrow();
+        expect(() => parseJSONRPCMessageWithResultResponseEnvelope({ jsonrpc: '2.0', id: 1, result: {}, extraTop: true })).toThrow();
     });
 
     it('continues rejecting an array result instead of treating it as an envelope', () => {
         expect(() =>
-            parseJSONRPCMessage({
+            parseJSONRPCMessageWithResultResponseEnvelope({
                 jsonrpc: '2.0',
                 id: 1,
                 result: [],

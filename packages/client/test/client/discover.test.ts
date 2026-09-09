@@ -6,10 +6,16 @@
  * reaches the transport.
  */
 import type { JSONRPCMessage, Transport } from '@modelcontextprotocol/core-internal';
-import { isJSONRPCRequest, parseJSONRPCMessage, SdkError, SdkErrorCode } from '@modelcontextprotocol/core-internal';
+import {
+    isJSONRPCRequest,
+    parseJSONRPCMessageWithResultResponseEnvelope,
+    SdkError,
+    SdkErrorCode
+} from '@modelcontextprotocol/core-internal';
 import { describe, expect, test } from 'vitest';
 
 import { Client } from '../../src/client/client';
+import { StdioClientTransport } from '../../src/client/stdio';
 
 const MODERN = '2026-07-28';
 
@@ -32,7 +38,7 @@ class ScriptedTransport implements Transport {
     }
     setProtocolVersion(_version: string): void {}
     reply(message: unknown): void {
-        this.onmessage?.(parseJSONRPCMessage(message));
+        this.onmessage?.(parseJSONRPCMessageWithResultResponseEnvelope(message));
     }
 }
 
@@ -118,6 +124,47 @@ describe('Client.discover()', () => {
 
         await client.close();
     });
+});
+
+test('accepts a spec-literal response envelope through real stdio negotiation', async () => {
+    const serverScript = String.raw`
+        process.stdin.setEncoding('utf8');
+        let buffer = '';
+        process.stdin.on('data', chunk => {
+            buffer += chunk;
+            while (true) {
+                const newline = buffer.indexOf('\n');
+                if (newline === -1) break;
+                const line = buffer.slice(0, newline);
+                buffer = buffer.slice(newline + 1);
+                const request = JSON.parse(line);
+                if (request.method !== 'server/discover') continue;
+                process.stdout.write(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    resultType: 'complete',
+                    result: {
+                        supportedVersions: ['2026-07-28'],
+                        capabilities: {},
+                        ttlMs: 0,
+                        cacheScope: 'private'
+                    },
+                    _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'stdio-server', version: '1.0.0' } }
+                }) + '\n');
+            }
+        });
+    `;
+    const transport = new StdioClientTransport({ command: process.execPath, args: ['-e', serverScript] });
+    const client = new Client(
+        { name: 'stdio-client', version: '1.0.0' },
+        { versionNegotiation: { mode: { pin: MODERN }, probe: { timeoutMs: 1_000 } } }
+    );
+
+    await client.connect(transport);
+
+    expect(client.getNegotiatedProtocolVersion()).toBe(MODERN);
+    expect(client.getServerVersion()).toEqual({ name: 'stdio-server', version: '1.0.0' });
+    await client.close();
 });
 
 describe('server identity from a DiscoverResult (#3002: _meta only)', () => {

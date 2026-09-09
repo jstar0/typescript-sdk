@@ -31,9 +31,6 @@ import type {
  * Validates and parses an unknown value as a JSON-RPC message.
  *
  * Use this to validate incoming messages in custom transport implementations.
- * A 2026-07-28 `server/discover` response may carry `resultType` and `_meta`
- * alongside the JSON-RPC `result`; those fields are lifted into `result` before
- * the strict JSON-RPC envelope schema validates the message.
  * Throws if the value does not conform to the JSON-RPC message schema.
  *
  * @param value - The value to validate (typically a parsed JSON object).
@@ -41,6 +38,20 @@ import type {
  * @throws If validation fails.
  */
 export function parseJSONRPCMessage(value: unknown): JSONRPCMessage {
+    return JSONRPCMessageSchema.parse(value);
+}
+
+/**
+ * Parses a client-side inbound message that may use the 2026-07-28
+ * `server/discover` response envelope. Some spec-conformant servers put
+ * `resultType` and `_meta` next to `result` at the JSON-RPC response level;
+ * the SDK's neutral message schema intentionally keeps those wire-only fields
+ * inside the result body, so fold them before strict validation.
+ *
+ * This is an explicit transport opt-in. The general {@link parseJSONRPCMessage}
+ * parser and server-side message paths remain strict.
+ */
+export function parseJSONRPCMessageWithResultResponseEnvelope(value: unknown): JSONRPCMessage {
     return JSONRPCMessageSchema.parse(normalizeResultResponseEnvelope(value));
 }
 

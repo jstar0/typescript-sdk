@@ -13,7 +13,7 @@ import {
     mcpNameSource,
     mediaTypeEssence,
     normalizeHeaders,
-    parseJSONRPCMessage,
+    parseJSONRPCMessageWithResultResponseEnvelope,
     PROTOCOL_VERSION_META_KEY,
     SdkError,
     SdkErrorCode,
@@ -764,7 +764,7 @@ export class StreamableHTTPClientTransport implements Transport {
 
                     if (!event.event || event.event === 'message') {
                         try {
-                            const message = parseJSONRPCMessage(JSON.parse(event.data));
+                            const message = parseJSONRPCMessageWithResultResponseEnvelope(JSON.parse(event.data));
                             // Handle both success AND error responses for completion detection and ID remapping
                             if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
                                 // Mark that we received a response - no need to reconnect for this request
@@ -1085,7 +1085,7 @@ export class StreamableHTTPClientTransport implements Transport {
                 // not silently stop matching.
                 if (response.status === 400 && typeof text === 'string' && this._isModernEnvelopedRequest(message)) {
                     try {
-                        const parsed = parseJSONRPCMessage(JSON.parse(text));
+                        const parsed = parseJSONRPCMessageWithResultResponseEnvelope(JSON.parse(text));
                         const requests = (Array.isArray(message) ? message : [message]).filter(m => isJSONRPCRequest(m));
                         if (isJSONRPCErrorResponse(parsed) && requests.some(r => r.id === parsed.id)) {
                             this.onmessage?.(parsed);
@@ -1141,7 +1141,9 @@ export class StreamableHTTPClientTransport implements Transport {
                 } else if (responseMediaType === 'application/json') {
                     // For non-streaming servers, we might get direct JSON responses
                     const data = await response.json();
-                    const responseMessages = Array.isArray(data) ? data.map(msg => parseJSONRPCMessage(msg)) : [parseJSONRPCMessage(data)];
+                    const responseMessages = Array.isArray(data)
+                        ? data.map(msg => parseJSONRPCMessageWithResultResponseEnvelope(msg))
+                        : [parseJSONRPCMessageWithResultResponseEnvelope(data)];
 
                     for (const msg of responseMessages) {
                         this.onmessage?.(msg);

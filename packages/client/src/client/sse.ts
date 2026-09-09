@@ -3,7 +3,7 @@ import {
     brandedHasInstance,
     createFetchWithInit,
     normalizeHeaders,
-    parseJSONRPCMessage,
+    parseJSONRPCMessageWithResultResponseEnvelope,
     SdkError,
     SdkErrorCode,
     SdkHttpError,
@@ -269,7 +269,7 @@ export class SSEClientTransport implements Transport {
                 const messageEvent = event as MessageEvent;
                 let message: JSONRPCMessage;
                 try {
-                    message = parseJSONRPCMessage(JSON.parse(messageEvent.data));
+                    message = parseJSONRPCMessageWithResultResponseEnvelope(JSON.parse(messageEvent.data));
                 } catch (error) {
                     this.onerror?.(error as Error);
                     return;

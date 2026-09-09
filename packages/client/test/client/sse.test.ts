@@ -176,6 +176,35 @@ describe('SSEClientTransport', () => {
             expect(receivedMessages[0]).toEqual(testMessage);
         });
 
+        it('receives and parses response-level result fields', async () => {
+            const receivedMessages: JSONRPCMessage[] = [];
+            transport = new SSEClientTransport(resourceBaseUrl);
+            transport.onmessage = msg => receivedMessages.push(msg);
+
+            await transport.start();
+
+            sendServerMessage!(
+                JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 'probe-id',
+                    result: { supportedVersions: ['2026-07-28'] },
+                    resultType: 'complete',
+                    _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'sse-server', version: '1.0.0' } }
+                })
+            );
+
+            await vi.waitFor(() => expect(receivedMessages).toHaveLength(1));
+            expect(receivedMessages[0]).toEqual({
+                jsonrpc: '2.0',
+                id: 'probe-id',
+                result: {
+                    supportedVersions: ['2026-07-28'],
+                    resultType: 'complete',
+                    _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'sse-server', version: '1.0.0' } }
+                }
+            });
+        });
+
         it('handles malformed JSON messages', async () => {
             const errors: Error[] = [];
             transport = new SSEClientTransport(resourceBaseUrl);

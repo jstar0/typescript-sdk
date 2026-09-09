@@ -1,3 +1,4 @@
+import { parseJSONRPCMessageWithResultResponseEnvelope } from '../../src/types/guards';
 import { ReadBuffer, STDIO_DEFAULT_MAX_BUFFER_SIZE } from '../../src/shared/stdio';
 import type { JSONRPCMessage } from '../../src/types/index';
 
@@ -35,7 +36,7 @@ test('should be reusable after clearing', () => {
 });
 
 test('should lift response-level server/discover fields before dispatch', () => {
-    const readBuffer = new ReadBuffer();
+    const readBuffer = new ReadBuffer({ messageParser: parseJSONRPCMessageWithResultResponseEnvelope });
     readBuffer.append(
         Buffer.from(
             JSON.stringify({

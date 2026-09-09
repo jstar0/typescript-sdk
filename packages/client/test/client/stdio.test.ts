@@ -72,6 +72,46 @@ test('should read messages', async () => {
     await client.close();
 });
 
+test('should parse response-level result fields from the child process before dispatch', async () => {
+    const serverScript = String.raw`
+        process.stdin.setEncoding('utf8');
+        let buffer = '';
+        process.stdin.on('data', chunk => {
+            buffer += chunk;
+            const newline = buffer.indexOf('\n');
+            if (newline === -1) return;
+            const request = JSON.parse(buffer.slice(0, newline));
+            process.stdout.write(JSON.stringify({
+                jsonrpc: '2.0',
+                id: request.id,
+                result: { supportedVersions: ['2026-07-28'] },
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'stdio-server', version: '1.0.0' } }
+            }) + '\n');
+        });
+    `;
+    const client = new StdioClientTransport({ command: process.execPath, args: ['-e', serverScript] });
+    const request: JSONRPCMessage = { jsonrpc: '2.0', id: 'probe-id', method: 'server/discover', params: {} };
+    const message = new Promise<JSONRPCMessage>((resolve, reject) => {
+        client.onmessage = resolve;
+        client.onerror = reject;
+    });
+
+    await client.start();
+    await client.send(request);
+
+    await expect(message).resolves.toEqual({
+        jsonrpc: '2.0',
+        id: 'probe-id',
+        result: {
+            supportedVersions: ['2026-07-28'],
+            resultType: 'complete',
+            _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'stdio-server', version: '1.0.0' } }
+        }
+    });
+    await client.close();
+});
+
 test('should return child process pid', async () => {
     const client = new StdioClientTransport(serverParameters);
 

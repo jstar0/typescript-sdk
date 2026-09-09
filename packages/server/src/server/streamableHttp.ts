@@ -15,7 +15,7 @@ import {
     isJSONRPCErrorResponse,
     isJSONRPCRequest,
     isJSONRPCResultResponse,
-    parseJSONRPCMessage,
+    JSONRPCMessageSchema,
     SUPPORTED_PROTOCOL_VERSIONS
 } from '@modelcontextprotocol/core-internal';
 
@@ -798,7 +798,9 @@ export class WebStandardStreamableHTTPServerTransport implements Transport {
 
             // handle batch and single messages
             try {
-                messages = Array.isArray(rawMessage) ? rawMessage.map(msg => parseJSONRPCMessage(msg)) : [parseJSONRPCMessage(rawMessage)];
+                messages = Array.isArray(rawMessage)
+                    ? rawMessage.map(msg => JSONRPCMessageSchema.parse(msg))
+                    : [JSONRPCMessageSchema.parse(rawMessage)];
             } catch (error) {
                 this.onerror?.(error as Error);
                 return this.createJsonErrorResponse(400, -32_700, 'Parse error: Invalid JSON-RPC message');
