@@ -1,5 +1,5 @@
+import { parseJSONRPCMessage } from '../types/guards';
 import type { JSONRPCMessage } from '../types/index';
-import { JSONRPCMessageSchema } from '../types/index';
 
 export const STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
 
@@ -54,7 +54,7 @@ export class ReadBuffer {
 }
 
 export function deserializeMessage(line: string): JSONRPCMessage {
-    return JSONRPCMessageSchema.parse(JSON.parse(line));
+    return parseJSONRPCMessage(JSON.parse(line));
 }
 
 export function serializeMessage(message: JSONRPCMessage): string {

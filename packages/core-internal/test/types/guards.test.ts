@@ -1,7 +1,50 @@
 import { describe, expect, it } from 'vitest';
 
 import { JSONRPC_VERSION } from '../../src/types/constants';
-import { isCallToolResult, isJSONRPCErrorResponse, isJSONRPCResponse, isJSONRPCResultResponse } from '../../src/types/guards';
+import {
+    isCallToolResult,
+    isJSONRPCErrorResponse,
+    isJSONRPCResponse,
+    isJSONRPCResultResponse,
+    parseJSONRPCMessage
+} from '../../src/types/guards';
+
+describe('parseJSONRPCMessage', () => {
+    it('lifts response-level server/discover fields before strict envelope validation', () => {
+        expect(
+            parseJSONRPCMessage({
+                jsonrpc: '2.0',
+                id: 'probe-1',
+                result: { supportedVersions: ['2026-07-28'] },
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+            })
+        ).toEqual({
+            jsonrpc: '2.0',
+            id: 'probe-1',
+            result: {
+                supportedVersions: ['2026-07-28'],
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+            }
+        });
+    });
+
+    it('continues rejecting unrelated response-level fields', () => {
+        expect(() => parseJSONRPCMessage({ jsonrpc: '2.0', id: 1, result: {}, extraTop: true })).toThrow();
+    });
+
+    it('continues rejecting an array result instead of treating it as an envelope', () => {
+        expect(() =>
+            parseJSONRPCMessage({
+                jsonrpc: '2.0',
+                id: 1,
+                result: [],
+                resultType: 'complete'
+            })
+        ).toThrow();
+    });
+});
 
 describe('isJSONRPCResponse', () => {
     it('returns true for a valid result response', () => {

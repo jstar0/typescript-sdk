@@ -6,7 +6,7 @@
  * reaches the transport.
  */
 import type { JSONRPCMessage, Transport } from '@modelcontextprotocol/core-internal';
-import { isJSONRPCRequest, SdkError, SdkErrorCode } from '@modelcontextprotocol/core-internal';
+import { isJSONRPCRequest, parseJSONRPCMessage, SdkError, SdkErrorCode } from '@modelcontextprotocol/core-internal';
 import { describe, expect, test } from 'vitest';
 
 import { Client } from '../../src/client/client';
@@ -31,8 +31,8 @@ class ScriptedTransport implements Transport {
         queueMicrotask(() => this.script(message, this));
     }
     setProtocolVersion(_version: string): void {}
-    reply(message: JSONRPCMessage): void {
-        this.onmessage?.(message);
+    reply(message: unknown): void {
+        this.onmessage?.(parseJSONRPCMessage(message));
     }
 }
 
@@ -93,7 +93,7 @@ describe('Client.discover()', () => {
                 resultType: 'complete',
                 result: { supportedVersions: [MODERN], capabilities: {} },
                 _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'envelope-server', version: '1.0.0' } }
-            } as JSONRPCMessage);
+            });
         });
         const client = new Client({ name: 'c', version: '0' }, { versionNegotiation: { mode: { pin: MODERN }, probe: { timeoutMs: 20 } } });
 

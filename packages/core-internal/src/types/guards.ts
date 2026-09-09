@@ -31,6 +31,9 @@ import type {
  * Validates and parses an unknown value as a JSON-RPC message.
  *
  * Use this to validate incoming messages in custom transport implementations.
+ * A 2026-07-28 `server/discover` response may carry `resultType` and `_meta`
+ * alongside the JSON-RPC `result`; those fields are lifted into `result` before
+ * the strict JSON-RPC envelope schema validates the message.
  * Throws if the value does not conform to the JSON-RPC message schema.
  *
  * @param value - The value to validate (typically a parsed JSON object).
@@ -38,7 +41,42 @@ import type {
  * @throws If validation fails.
  */
 export function parseJSONRPCMessage(value: unknown): JSONRPCMessage {
-    return JSONRPCMessageSchema.parse(value);
+    return JSONRPCMessageSchema.parse(normalizeResultResponseEnvelope(value));
+}
+
+const RESULT_RESPONSE_ENVELOPE_KEYS = new Set(['jsonrpc', 'id', 'result', 'resultType', '_meta']);
+
+function normalizeResultResponseEnvelope(value: unknown): unknown {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return value;
+    }
+
+    const envelope = value as Record<string, unknown>;
+    if (
+        envelope['jsonrpc'] !== '2.0' ||
+        !Object.hasOwn(envelope, 'id') ||
+        typeof envelope['result'] !== 'object' ||
+        envelope['result'] === null ||
+        Array.isArray(envelope['result'])
+    ) {
+        return value;
+    }
+
+    const keys = Object.keys(envelope);
+    const hasResponseLevelFields = Object.hasOwn(envelope, 'resultType') || Object.hasOwn(envelope, '_meta');
+    if (!hasResponseLevelFields || keys.some(key => !RESULT_RESPONSE_ENVELOPE_KEYS.has(key))) {
+        return value;
+    }
+
+    const { result, resultType, _meta, ...rest } = envelope;
+    return {
+        ...rest,
+        result: {
+            ...(result as Record<string, unknown>),
+            ...(Object.hasOwn(envelope, 'resultType') && { resultType }),
+            ...(Object.hasOwn(envelope, '_meta') && { _meta })
+        }
+    };
 }
 
 export const isJSONRPCRequest = (value: unknown): value is JSONRPCRequest => JSONRPCRequestSchema.safeParse(value).success;

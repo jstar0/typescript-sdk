@@ -398,6 +398,44 @@ describe('StreamableHTTPClientTransport', () => {
         expect(messageSpy).toHaveBeenCalledWith(responseMessage);
     });
 
+    it('should parse response-level server/discover fields before dispatch', async () => {
+        const message: JSONRPCMessage = {
+            jsonrpc: '2.0',
+            method: 'server/discover',
+            params: {},
+            id: 'probe-id'
+        };
+        const responseEnvelope = {
+            jsonrpc: '2.0',
+            id: 'probe-id',
+            result: { supportedVersions: ['2026-07-28'] },
+            resultType: 'complete',
+            _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+        };
+
+        (globalThis.fetch as Mock).mockResolvedValueOnce(
+            new Response(JSON.stringify(responseEnvelope), {
+                status: 200,
+                headers: { 'content-type': 'application/json' }
+            })
+        );
+
+        const messageSpy = vi.fn();
+        transport.onmessage = messageSpy;
+
+        await transport.send(message);
+
+        expect(messageSpy).toHaveBeenCalledWith({
+            jsonrpc: '2.0',
+            id: 'probe-id',
+            result: {
+                supportedVersions: ['2026-07-28'],
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+            }
+        });
+    });
+
     it('should attempt initial GET connection and handle 405 gracefully', async () => {
         // Mock the server not supporting GET for SSE (returning 405)
         (globalThis.fetch as Mock).mockResolvedValueOnce({

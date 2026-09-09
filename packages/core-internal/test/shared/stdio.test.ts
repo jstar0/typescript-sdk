@@ -34,6 +34,31 @@ test('should be reusable after clearing', () => {
     expect(readBuffer.readMessage()).toEqual(testMessage);
 });
 
+test('should lift response-level server/discover fields before dispatch', () => {
+    const readBuffer = new ReadBuffer();
+    readBuffer.append(
+        Buffer.from(
+            JSON.stringify({
+                jsonrpc: '2.0',
+                id: 'probe-1',
+                result: { supportedVersions: ['2026-07-28'] },
+                resultType: 'complete',
+                _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+            }) + '\n'
+        )
+    );
+
+    expect(readBuffer.readMessage()).toEqual({
+        jsonrpc: '2.0',
+        id: 'probe-1',
+        result: {
+            supportedVersions: ['2026-07-28'],
+            resultType: 'complete',
+            _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'server', version: '1.0.0' } }
+        }
+    });
+});
+
 describe('non-JSON line filtering', () => {
     test('should skip empty lines', () => {
         const readBuffer = new ReadBuffer();
