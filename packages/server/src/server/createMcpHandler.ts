@@ -335,7 +335,9 @@ function createLegacyStatelessFallback(
 ): LegacyHttpHandler {
     return async (request, options) => {
         if (request.method.toUpperCase() !== 'POST') {
-            return jsonRpcErrorResponse(405, -32_000, 'Method not allowed.');
+            const response = jsonRpcErrorResponse(405, -32_000, 'Method not allowed.');
+            response.headers.set('Allow', 'POST');
+            return response;
         }
         try {
             const product = await factory({
